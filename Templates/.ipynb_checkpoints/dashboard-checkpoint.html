@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Customer Segmentation Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        .form-section, .upload-section {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        button {
+            padding: 8px 15px;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>Customer Segmentation Dashboard</h1>
+
+    <!-- Include Single User Form -->
+    {% include "form.html" %}
+
+    <!-- Include Bulk Upload Form -->
+    {% include "upload.html" %}
+
+</body>
+</html>

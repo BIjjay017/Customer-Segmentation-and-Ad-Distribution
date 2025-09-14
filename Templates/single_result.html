@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Single Upload Result</title>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; background: #f9fafb; }
+h2 { text-align: center; margin-bottom: 20px; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+th { background-color: #3b82f6; color: white; }
+tr:nth-child(even) { background-color: #f2f2f2; }
+.status-success { color: green; font-weight: bold; }
+.status-fail { color: red; font-weight: bold; }
+.back-link { margin-top: 20px; text-align: center; }
+.back-link a { text-decoration: none; color: #3b82f6; }
+</style>
+</head>
+<body>
+<h2>Result</h2>
+<table>
+<thead>
+<tr>
+<th>Email</th>
+<th>Status</th>
+<th>Cluster</th>
+</tr>
+</thead>
+<tbody>
+{% for row in results %}
+<tr>
+<td>{{ row.email }}</td>
+<td class="{{ 'status-success' if '✅' in row.status else 'status-fail' }}">{{ row.status }}</td>
+<td>{{ row.cluster if row.cluster else '-' }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+<div class="back-link">
+<a href="{{ url_for('single_input') }}">⬅ Back to Single Input</a>
+</div>
+</body>
+</html>
