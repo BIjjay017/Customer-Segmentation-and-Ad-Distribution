@@ -1,5 +1,7 @@
 import os
-import mysql.connector  # fixed import
+import io
+import csv
+from flask import Response
 from flask import Flask, request, render_template, redirect, url_for
 import joblib
 import numpy as np
@@ -9,17 +11,21 @@ from werkzeug.utils import secure_filename
 from flask import Flask, request, render_template, redirect, url_for, session, flash
 from utils.db_utils import get_ad_for_cluster, log_campaign
 from utils.email_utils import send_email
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
 
 # ---------------- DB CONFIG ----------------
 db_config = {
     "host": "localhost",
-    "user": "root",
-    "password": "",
-    "database": "customer_segmentation"
+    "user": "postgres",
+    "password": "Lenevo5ryzen7",
+    "dbname": "customer_segmentation"
 }
 
 def get_db_connection():
-    return mysql.connector.connect(**db_config)
+    return psycopg2.connect(**db_config)
+
 
 # ---------------- UPLOAD CONFIG ----------------
 UPLOAD_FOLDER = "static/images"
@@ -41,11 +47,42 @@ app.secret_key = "my_super_secret_key_123"
 centroids = joblib.load("Model/centroids.pkl")
 scaler = joblib.load("Model/scaler.pkl")
 
-centroids_scaled = scaler.transform(centroids)
+# Get exact training feature names (in the order scaler expects)
+if hasattr(scaler, "feature_names_in_"):
+    FEATURE_NAMES = list(scaler.feature_names_in_)   # e.g. ['BALANCE','PURCHASES',...]
+else:
+    # fallback if scaler doesn't carry names (adjust if your training order differs)
+    FEATURE_NAMES = [
+        "BALANCE","PURCHASES","CASH_ADVANCE","CREDIT_LIMIT",
+        "PAYMENTS","PRC_FULL_PAYMENT","PURCHASES_FREQUENCY","CASH_ADVANCE_FREQUENCY"
+    ]
+
+# Normalized lowercase names that match form/CSV headers you use in the app
+FEATURE_NAMES_LOWER = [n.strip().lower().replace(" ", "_") for n in FEATURE_NAMES]
+
+# Small synonyms mapping (expand if your CSV/form uses different names)
+SYNONYMS = {
+    "prc_full_payment": "full_payment",
+    "purchases_frequency": "purchases_freq",
+    "cash_advance_frequency": "cash_adv_freq"
+}
 
 def assign_cluster(new_data):
-    new_data_scaled = scaler.transform([new_data])
-    distances = np.linalg.norm(new_data_scaled - centroids_scaled, axis=1)
+    """
+    new_data: 1D list/array of raw feature values in the normalized lower-order:
+      FEATURE_NAMES_LOWER order, e.g. ['balance','purchases',...]
+    It constructs a DataFrame with exact column names scaler expects, transforms, and finds nearest centroid.
+    Returns: int cluster index
+    """
+    # Ensure input is length-matched
+    if len(new_data) != len(FEATURE_NAMES_LOWER):
+        raise ValueError(f"Expected {len(FEATURE_NAMES_LOWER)} features in order {FEATURE_NAMES_LOWER}")
+
+    # Build a DataFrame with normalized columns then rename to scaler's original column names
+    df = pd.DataFrame([new_data], columns=FEATURE_NAMES_LOWER)
+    df.columns = FEATURE_NAMES  # now matches scaler.feature_names_in_
+    scaled = scaler.transform(df)   # scaler.transform accepts DataFrame with those column names
+    distances = np.linalg.norm(scaled - centroids, axis=1)  # centroids already scaled
     return int(np.argmin(distances))
 
 
@@ -134,7 +171,6 @@ def single_input():
 
     return render_template("single.html", errors=errors, values=values)
 
-
 # ---------------- BULK UPLOAD ----------------
 @app.route("/bulk", methods=["GET", "POST"])
 def bulk_input():
@@ -152,38 +188,47 @@ def bulk_input():
                 df = pd.read_excel(uploaded_file)
             else:
                 df = pd.read_csv(uploaded_file)
-            df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
         except Exception as e:
             flash(f"❌ Error reading file: {e}", "danger")
             return redirect(request.url)
 
-        required_columns = [
-            "email", "balance", "purchases", "cash_advance",
-            "credit_limit", "payments", "full_payment",
-            "purchases_freq", "cash_adv_freq"
-        ]
-        for col in required_columns:
-            if col not in df.columns:
-                flash(f"❌ Missing column: {col}", "danger")
-                return redirect(request.url)
+        # Normalize headers to lower_case_underscore
+        df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+
+        # Try synonyms mapping so user can upload common header names
+        for target, alt in SYNONYMS.items():
+            if target not in df.columns and alt in df.columns:
+                df = df.rename(columns={alt: target})
+
+        # Ensure required columns exist
+        missing = [c for c in FEATURE_NAMES_LOWER + ["email"] if c not in df.columns]
+        if missing:
+            flash(f"Missing required columns: {missing}", "danger")
+            return redirect(request.url)
+
+        # Reorder df to feature order and cast floats
+        X_df = df[FEATURE_NAMES_LOWER].astype(float).copy()
+        # Rename to scaler original names expected by scaler
+        X_df.columns = FEATURE_NAMES
+
+        # Vectorized scale + assign clusters
+        try:
+            X_scaled = scaler.transform(X_df)  # shape (n, m)
+            distances = np.linalg.norm(X_scaled[:, None, :] - centroids[None, :, :], axis=2)  # (n_clusters)
+            clusters = np.argmin(distances, axis=1)
+        except Exception as e:
+            flash(f"❌ Error during scaling/assignment: {e}", "danger")
+            return redirect(request.url)
+
+        # Attach cluster assignment to original df
+        df["cluster_assigned"] = clusters
 
         results = []
-
-        for _, row in df.iterrows():
-            email = row.get("email", "Unknown")
-            try:
-                features = [
-                    float(row["balance"]), float(row["purchases"]), float(row["cash_advance"]),
-                    float(row["credit_limit"]), float(row["payments"]), float(row["full_payment"]),
-                    float(row["purchases_freq"]), float(row["cash_adv_freq"])
-                ]
-                if any(f < 0 for f in features):
-                    raise ValueError("Negative value detected")
-            except Exception as e:
-                results.append({"email": email, "status": "❌ Invalid data", "error": str(e)})
-                continue
-
-            cluster_id = assign_cluster(features)
+        # Save customers, send emails and log
+        for idx, row in df.iterrows():
+            email = row.get("email", "unknown")
+            features = [float(row[c]) for c in FEATURE_NAMES_LOWER]
+            cluster_id = int(row["cluster_assigned"])
 
             # Save customer
             try:
@@ -215,15 +260,17 @@ def bulk_input():
             except Exception as e:
                 results.append({"email": email, "status": "❌ Email failed", "error": str(e)})
 
+        # Render results page (bulk_result.html expects results list)
         return render_template("bulk_result.html", results=results)
 
     return render_template("upload.html")
+
 
 # ---------------- ADS MANAGEMENT ----------------
 @app.route("/ads", methods=["GET", "POST"])
 def ads_management():
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     if request.method == "POST":
         cluster_id = request.form.get("cluster_id")
@@ -278,7 +325,7 @@ def delete_ad(ad_id):
 @app.route("/ads/edit/<int:ad_id>", methods=["GET", "POST"])
 def edit_ad(ad_id):
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     if request.method == "POST":
         cluster_id = request.form.get("cluster_id")
@@ -313,6 +360,79 @@ def edit_ad(ad_id):
     cursor.close()
     conn.close()
     return render_template("edit_ad.html", ad=ad)
+
+# ---------------- LOGS VIEW ----------------
+@app.route("/logs")
+def view_logs():
+    # require login (same check as dashboard)
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+    # Join logs with customers and ads for friendly display
+    cursor.execute("""
+        SELECT
+            l.id AS log_id,
+            l.timestamp,
+            l.email AS sent_to,
+            l.customer_id,
+            c.email AS customer_email,
+            l.ad_id,
+            a.cluster AS ad_cluster,
+            a.ad_text
+        FROM logs l
+        LEFT JOIN customers c ON l.customer_id = c.id
+        LEFT JOIN ads a ON l.ad_id = a.id
+        ORDER BY l.timestamp DESC
+        LIMIT 500
+    """)
+    logs = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template("logs.html", logs=logs)
+
+
+# ---------------- LOGS EXPORT CSV ----------------
+@app.route("/logs/export")
+def export_logs():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            l.id, l.timestamp, l.email, l.customer_id, c.email AS customer_email,
+            l.ad_id, a.cluster AS ad_cluster, a.ad_text
+        FROM logs l
+        LEFT JOIN customers c ON l.customer_id = c.id
+        LEFT JOIN ads a ON l.ad_id = a.id
+        ORDER BY l.timestamp DESC
+    """)
+    rows = cursor.fetchall()
+    colnames = [d[0] for d in cursor.description]
+    cursor.close()
+    conn.close()
+
+    # Create CSV in-memory
+    si = io.StringIO()
+    writer = csv.writer(si)
+    writer.writerow(colnames)
+    for r in rows:
+        writer.writerow(r)
+
+    output = si.getvalue()
+    si.close()
+
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=logs_export.csv"}
+    )
+
 
 # ---------- Register ----------
 @app.route("/register", methods=["GET", "POST"])
@@ -349,7 +469,7 @@ def login():
         password = request.form["password"]
 
         conn = get_db_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT * FROM users WHERE email=%s", (email,))
         user = cur.fetchone()
         cur.close()

@@ -1,22 +1,27 @@
-import mysql.connector
+import psycopg2
+import random
+from psycopg2.extras import RealDictCursor  # for dict-like cursor
 
 def get_db_connection():
-    return mysql.connector.connect(
+    return psycopg2.connect(
         host="localhost",
-        user="root",
-        password="",
-        database="customer_segmentation"
+        user="postgres",         # your Postgres user
+        password="Lenevo5ryzen7",
+        dbname="customer_segmentation"
     )
 
 def get_ad_for_cluster(cluster_id):
-    """Get one ad for the given cluster"""
+    """Get one random ad for the given cluster"""
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM ads WHERE cluster = %s LIMIT 1", (cluster_id,))
-    ad = cursor.fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)  # dict-like rows
+    cursor.execute("SELECT * FROM ads WHERE cluster = %s", (cluster_id,))
+    ads = cursor.fetchall()
     cursor.close()
     conn.close()
-    return ad
+
+    if ads:
+        return random.choice(ads)  # pick one ad randomly
+    return None
 
 def log_campaign(customer_id, ad_id, email):
     """Log the sent ad to the logs table"""

@@ -3,12 +3,7 @@
 <head>
     <title>Customer Segmentation - Upload</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background-color: #ffffff;
@@ -20,7 +15,6 @@
             color: #333;
             padding: 20px;
         }
-
         .upload-container {
             background: #ffffff;
             padding: 40px;
@@ -31,20 +25,8 @@
             max-width: 500px;
             text-align: center;
         }
-
-        h2 {
-            text-align: center;
-            margin-bottom: 32px;
-            font-size: 24px;
-            font-weight: 600;
-            color: #1a1a1a;
-        }
-
-        .file-upload-wrapper {
-            margin-bottom: 24px;
-            position: relative;
-        }
-
+        h2 { margin-bottom: 24px; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .file-upload-wrapper { margin-bottom: 24px; position: relative; }
         .file-upload-area {
             border: 2px dashed #d1d5db;
             border-radius: 8px;
@@ -54,43 +36,27 @@
             cursor: pointer;
             position: relative;
         }
-
-        .file-upload-area:hover {
-            border-color: #3b82f6;
-            background-color: #eff6ff;
-        }
-
+        .file-upload-area:hover,
         .file-upload-area.dragover {
             border-color: #3b82f6;
             background-color: #eff6ff;
         }
 
+        /* Hide the original file input */
         input[type="file"] {
             position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             opacity: 0;
             cursor: pointer;
+            z-index: 10;
         }
 
-        .upload-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
-            color: #6b7280;
-        }
-
-        .upload-text {
-            color: #374151;
-            font-size: 16px;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
-
-        .upload-subtext {
-            color: #6b7280;
-            font-size: 14px;
-        }
-
+        .upload-icon { font-size: 48px; margin-bottom: 16px; color: #6b7280; }
+        .upload-text { color: #374151; font-size: 16px; margin-bottom: 8px; font-weight: 500; }
+        .upload-subtext { color: #6b7280; font-size: 14px; }
         .file-info {
             margin-top: 16px;
             padding: 12px;
@@ -102,8 +68,31 @@
             display: none;
         }
 
-        button {
-            width: 100%;
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .select-file-btn {
+            flex: 1;
+            padding: 12px;
+            background-color: #6b7280;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .select-file-btn:hover {
+            background-color: #4b5563;
+        }
+
+        .upload-btn {
+            flex: 2;
             padding: 12px;
             background-color: #3b82f6;
             color: white;
@@ -115,55 +104,61 @@
             transition: background-color 0.2s ease;
         }
 
-        button:hover {
+        .upload-btn:hover {
             background-color: #2563eb;
         }
 
-        button:active {
+        .upload-btn:active {
             background-color: #1d4ed8;
         }
 
-        button:disabled {
+        .upload-btn:disabled {
             background-color: #9ca3af;
             cursor: not-allowed;
         }
 
-        .back-link {
-            margin-top: 24px;
-            text-align: center;
-        }
-
+        .back-link { margin-top: 24px; text-align: center; }
         .back-link a {
-            color: #6b7280;
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            transition: color 0.2s ease;
+            color: #6b7280; text-decoration: none; font-size: 14px; font-weight: 500;
+            display: inline-flex; align-items: center; gap: 4px; transition: color 0.2s ease;
         }
-
-        .back-link a:hover {
-            color: #3b82f6;
-            text-decoration: underline;
+        .back-link a:hover { color: #3b82f6; text-decoration: underline; }
+        .flash-message {
+            margin-bottom: 15px; padding: 10px; border-radius: 6px;
+            background-color: #fee2e2; color: #991b1b; font-size: 14px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
     <div class="upload-container">
         <h2>Upload Customer Data</h2>
-        <form method="POST" action="/bulk" enctype="multipart/form-data">
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash-message">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/bulk" enctype="multipart/form-data" id="uploadForm">
             <div class="file-upload-wrapper">
                 <div class="file-upload-area" id="fileUploadArea">
                     <div class="upload-icon">📄</div>
                     <div class="upload-text">Choose a file or drag and drop</div>
-                    <div class="upload-subtext">Support for .csv files only</div>
-                    <input type="file" name="file" accept=".csv" required id="fileInput">
+                    <div class="upload-subtext">Support for .csv, .xls, .xlsx</div>
+                    <input type="file" name="file" accept=".csv,.xls,.xlsx" required id="fileInput">
+
                 </div>
                 <div class="file-info" id="fileInfo"></div>
             </div>
-            <button type="submit" id="uploadButton">Upload and Predict</button>
+
+            <div class="button-group">
+                <button type="button" class="select-file-btn" id="selectFileBtn">Select File</button>
+                <button type="submit" class="upload-btn" id="uploadButton" disabled>Upload and Predict</button>
+            </div>
         </form>
 
         <div class="back-link">
@@ -176,39 +171,54 @@
         const fileUploadArea = document.getElementById('fileUploadArea');
         const fileInfo = document.getElementById('fileInfo');
         const uploadButton = document.getElementById('uploadButton');
+        const selectFileBtn = document.getElementById('selectFileBtn');
 
-        // Handle file selection
-        fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                showFileInfo(file);
-            }
+        // Select file button click
+        selectFileBtn.addEventListener('click', function() {
+            fileInput.click();
         });
 
-        // Handle drag and drop
-        fileUploadArea.addEventListener('dragover', function(e) {
+        // File input change
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) showFileInfo(file);
+        });
+
+        // Drag & Drop on upload area
+        fileUploadArea.addEventListener('dragover', e => {
             e.preventDefault();
             fileUploadArea.classList.add('dragover');
         });
 
-        fileUploadArea.addEventListener('dragleave', function(e) {
+        fileUploadArea.addEventListener('dragleave', e => {
             e.preventDefault();
             fileUploadArea.classList.remove('dragover');
         });
 
-        fileUploadArea.addEventListener('drop', function(e) {
+        fileUploadArea.addEventListener('drop', e => {
             e.preventDefault();
             fileUploadArea.classList.remove('dragover');
-
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 const file = files[0];
-                if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+                if (isValidFile(file)) {
                     fileInput.files = files;
                     showFileInfo(file);
                 }
             }
         });
+
+        // Click on upload area to select file
+        fileUploadArea.addEventListener('click', function(e) {
+            // Only trigger if clicking on the area itself, not the hidden file input
+            if (e.target === fileUploadArea || e.target.closest('.file-upload-area') === fileUploadArea) {
+                fileInput.click();
+            }
+        });
+
+        function isValidFile(file) {
+            return file.name.endsWith('.csv') || file.name.endsWith('.xls') || file.name.endsWith('.xlsx');
+        }
 
         function showFileInfo(file) {
             fileInfo.innerHTML = `Selected: ${file.name} (${formatFileSize(file.size)})`;
@@ -218,8 +228,7 @@
 
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const k = 1024, sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }

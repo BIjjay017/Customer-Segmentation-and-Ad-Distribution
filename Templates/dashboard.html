@@ -29,7 +29,7 @@
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
       border: 1px solid #e1e5e9;
       width: 100%;
-      max-width: 600px;
+      max-width: 800px;
       text-align: center;
     }
 
@@ -42,7 +42,7 @@
 
     .nav-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 20px;
       margin-bottom: 32px;
     }
@@ -98,6 +98,17 @@
       color: white;
     }
 
+    .nav-card.quaternary {
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      color: white;
+      border-color: #8b5cf6;
+    }
+
+    .nav-card.quaternary:hover {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: white;
+    }
+
     .nav-icon {
       font-size: 24px;
       margin-bottom: 12px;
@@ -148,12 +159,18 @@
       }
 
       .nav-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
         gap: 16px;
       }
 
       .nav-card {
         padding: 20px 16px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .nav-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -180,14 +197,20 @@
         <div class="nav-title">Ad Management</div>
         <div class="nav-description">Manage advertisements</div>
       </a>
-    </div>
-  </div>
 
-  <div class="logout-section">
-    <a href="{{ url_for('logout') }}" class="logout-link">
-      <span>🚪</span>
-      Logout
-    </a>
+      <a href="{{ url_for('view_logs') }}" class="nav-card quaternary">
+        <span class="nav-icon">📋</span>
+        <div class="nav-title">Logs</div>
+        <div class="nav-description">View system logs</div>
+      </a>
+    </div>
+
+    <div class="logout-section">
+      <a href="{{ url_for('logout') }}" class="logout-link">
+        <span>🚪</span>
+        Logout
+      </a>
+    </div>
   </div>
 </body>
 </html>

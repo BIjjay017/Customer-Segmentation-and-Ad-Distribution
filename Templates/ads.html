@@ -4,350 +4,345 @@
   <meta charset="UTF-8">
   <title>Ad Management</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background-color: #ffffff;
-      min-height: 100vh;
-      color: #333;
-      padding: 20px;
-      line-height: 1.6;
-    }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: #ffffff;
+  min-height: 100vh;
+  color: #333;
+  padding: 20px;
+  line-height: 1.6;
+}
 
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-    }
+/* ---------------------- */
+/* TWO COLUMN LAYOUT */
+/* ---------------------- */
+.two-column-container {
+  display: flex;
+  gap: 24px;
+  max-width: 1300px;
+  margin: 0 auto;
+}
 
-    h2 {
-      text-align: center;
-      margin-bottom: 32px;
-      font-size: 28px;
-      font-weight: 600;
-      color: #1a1a1a;
-    }
+.left-panel {
+  width: 35%;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #e1e5e9;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
 
-    .form-container {
-      background: #ffffff;
-      padding: 32px;
-      border-radius: 8px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-      border: 1px solid #e1e5e9;
-      margin-bottom: 32px;
-    }
+.right-panel {
+  width: 65%;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #e1e5e9;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
 
-    .form-group {
-      margin-bottom: 20px;
-    }
+/* Heading styles */
+h2, h3 {
+  text-align: center;
+  margin-bottom: 24px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
 
-    label {
-      display: block;
-      margin-bottom: 6px;
-      font-weight: 500;
-      color: #374151;
-      font-size: 14px;
-    }
+h2 {
+  font-size: 26px;
+}
 
-    input[type="number"], textarea {
-      width: 100%;
-      padding: 12px 16px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 16px;
-      transition: border-color 0.2s ease;
-      background-color: #ffffff;
-      font-family: inherit;
-      resize: vertical;
-    }
+h3 {
+  font-size: 20px;
+}
 
-    input[type="number"]:focus, textarea:focus {
-      outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    }
 
-    .file-upload-wrapper {
-      position: relative;
-    }
+/* ---------------------- */
+/* FORM STYLES */
+/* ---------------------- */
+.form-group {
+  margin-bottom: 20px;
+}
 
-    .file-upload-area {
-      border: 2px dashed #d1d5db;
-      border-radius: 8px;
-      padding: 24px;
-      background-color: #f9fafb;
-      transition: all 0.2s ease;
-      cursor: pointer;
-      text-align: center;
-      position: relative;
-    }
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #374151;
+  font-size: 14px;
+}
 
-    .file-upload-area:hover {
-      border-color: #3b82f6;
-      background-color: #eff6ff;
-    }
+input[type="number"], textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 16px;
+  background-color: #ffffff;
+  resize: vertical;
+}
 
-    input[type="file"] {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      opacity: 0;
-      cursor: pointer;
-    }
+input[type="number"]:focus, textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
 
-    .upload-text {
-      color: #6b7280;
-      font-size: 14px;
-    }
+/* File upload */
+.file-upload-area {
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 24px;
+  background: #f9fafb;
+  text-align: center;
+  position: relative;
+}
 
-    button {
-      background-color: #3b82f6;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 16px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-      padding: 12px 24px;
-    }
+.file-upload-area:hover {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
 
-    button:hover {
-      background-color: #2563eb;
-    }
+.file-upload-area input[type="file"] {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0; left: 0;
+  opacity: 0;
+  cursor: pointer;
+}
 
-    button:active {
-      background-color: #1d4ed8;
-    }
+.upload-text {
+  color: #6b7280;
+  font-size: 14px;
+}
 
-    .add-button {
-      width: 100%;
-      padding: 12px;
-      margin-top: 8px;
-    }
+/* Button */
+button {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 12px 24px;
+  transition: background-color 0.2s ease;
+}
 
-    h3 {
-      font-size: 20px;
-      font-weight: 600;
-      color: #1a1a1a;
-      margin-bottom: 24px;
-      text-align: center;
-    }
+button:hover {
+  background-color: #2563eb;
+}
 
-    .table-container {
-      background: #ffffff;
-      border-radius: 8px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-      border: 1px solid #e1e5e9;
-      overflow: hidden;
-      margin-bottom: 32px;
-    }
+button:active {
+  background-color: #1d4ed8;
+}
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
+.add-button {
+  width: 100%;
+  margin-top: 8px;
+}
 
-    th {
-      background-color: #f8fafc;
-      padding: 16px 12px;
-      text-align: left;
-      font-weight: 600;
-      color: #374151;
-      border-bottom: 1px solid #e5e7eb;
-      font-size: 14px;
-    }
 
-    td {
-      padding: 16px 12px;
-      border-bottom: 1px solid #f3f4f6;
-      vertical-align: top;
-    }
+/* ---------------------- */
+/* TABLE STYLES */
+/* ---------------------- */
+.table-container {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e1e5e9;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
 
-    tr:last-child td {
-      border-bottom: none;
-    }
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
 
-    tr:hover {
-      background-color: #f9fafb;
-    }
+th {
+  background-color: #f8fafc;
+  padding: 16px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+}
 
-    .ad-image {
-      border-radius: 4px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
+td {
+  padding: 16px 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
 
-    .no-image {
-      color: #6b7280;
-      font-style: italic;
-      font-size: 14px;
-    }
+tr:hover {
+  background-color: #f9fafb;
+}
 
-    .actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
+.ad-image {
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
 
-    .edit-link {
-      color: #3b82f6;
-      text-decoration: none;
-      font-weight: 500;
-      font-size: 14px;
-      padding: 6px 12px;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
+.no-image {
+  color: #6b7280;
+  font-style: italic;
+}
 
-    .edit-link:hover {
-      background-color: #eff6ff;
-      text-decoration: underline;
-    }
+/* Action buttons */
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 
-    .delete-form {
-      display: inline;
-    }
+.edit-link {
+  color: #3b82f6;
+  text-decoration: none;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: 0.2s;
+}
 
-    .delete-button {
-      background-color: #ef4444;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      padding: 6px 12px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
+.edit-link:hover {
+  background-color: #eff6ff;
+  text-decoration: underline;
+}
 
-    .delete-button:hover {
-      background-color: #dc2626;
-    }
+.delete-button {
+  background-color: #ef4444;
+  padding: 6px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+}
 
-    .back-link {
-      text-align: center;
-      margin-top: 32px;
-    }
+.delete-button:hover {
+  background-color: #dc2626;
+}
 
-    .back-link a {
-      color: #6b7280;
-      text-decoration: none;
-      font-size: 16px;
-      font-weight: 500;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      transition: color 0.2s ease;
-    }
+/* Back link */
+.back-link {
+  text-align: center;
+  margin-top: 24px;
+}
 
-    .back-link a:hover {
-      color: #3b82f6;
-      text-decoration: underline;
-    }
+.back-link a {
+  color: #6b7280;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 500;
+  transition: 0.2s;
+}
 
-    @media (max-width: 768px) {
-      .container {
-        padding: 0 10px;
-      }
+.back-link a:hover {
+  color: #3b82f6;
+  text-decoration: underline;
+}
 
-      table {
-        font-size: 14px;
-      }
 
-      th, td {
-        padding: 12px 8px;
-      }
+/* ---------------------- */
+/* RESPONSIVE */
+/* ---------------------- */
+@media (max-width: 900px) {
+  .two-column-container {
+    flex-direction: column;
+  }
 
-      .ad-image {
-        width: 80px;
-      }
-
-      .actions {
-        flex-direction: column;
-        gap: 4px;
-      }
-    }
-  </style>
-</head>
+  .left-panel, .right-panel {
+    width: 100%;
+  }
+}
+</style>
 <body>
-  <div class="container">
-    <h2>📢 Ad Management</h2>
+  <div class="two-column-container">
 
-    <!-- Add new ad -->
-    <div class="form-container">
-      <form method="POST" enctype="multipart/form-data">
-        <div class="form-group">
-          <label>Cluster:</label>
-          <input type="number" name="cluster_id" required>
-        </div>
+    <!-- LEFT: Ad Management -->
+    <div class="left-panel">
+      <h2>📢 Ad Management</h2>
 
-        <div class="form-group">
-          <label>Ad Text:</label>
-          <textarea name="ad_text" rows="4" required></textarea>
-        </div>
+      <div class="form-container">
+        <form method="POST" enctype="multipart/form-data">
+          <div class="form-group">
+            <label>Cluster:</label>
+            <input type="number" name="cluster_id" required>
+          </div>
 
-        <div class="form-group">
-          <label>Upload Image:</label>
-          <div class="file-upload-wrapper">
-            <div class="file-upload-area">
-              <div class="upload-text">📷 Choose image file or drag and drop</div>
-              <input type="file" name="image_file" accept="image/*">
+          <div class="form-group">
+            <label>Ad Text:</label>
+            <textarea name="ad_text" rows="4" required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Upload Image:</label>
+            <div class="file-upload-wrapper">
+              <div class="file-upload-area">
+                <div class="upload-text">📷 Choose image file or drag and drop</div>
+                <input type="file" name="image_file" accept="image/*">
+              </div>
             </div>
           </div>
-        </div>
 
-        <button type="submit" class="add-button">Add Ad</button>
-      </form>
+          <button type="submit" class="add-button">Add Ad</button>
+        </form>
+      </div>
     </div>
 
-    <h3>Available Ads</h3>
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Cluster</th>
-            <th>Ad Text</th>
-            <th>Image</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for ad in ads %}
-          <tr>
-            <td>{{ ad.id }}</td>
-            <td>{{ ad.cluster }}</td>
-            <td>{{ ad.ad_text }}</td>
-            <td>
-              {% if ad.image_url %}
-                <img src="{{ ad.image_url }}" alt="Ad Image" width="120" class="ad-image">
-              {% else %}
-                <span class="no-image">No image</span>
-              {% endif %}
-            </td>
-            <td>
-              <div class="actions">
-                <a href="{{ url_for('edit_ad', ad_id=ad.id) }}" class="edit-link">Edit</a>
-                <form action="{{ url_for('delete_ad', ad_id=ad.id) }}" method="POST" class="delete-form">
-                  <button type="submit" class="delete-button" onclick="return confirm('Are you sure you want to delete this ad?')">Delete</button>
-                </form>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <!-- RIGHT: Available Ads -->
+    <div class="right-panel">
+      <h3>Available Ads</h3>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Cluster</th>
+              <th>Ad Text</th>
+              <th>Image</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ad in ads %}
+            <tr>
+              <td>{{ ad.id }}</td>
+              <td>{{ ad.cluster }}</td>
+              <td>{{ ad.ad_text }}</td>
+              <td>
+                {% if ad.image_url %}
+                  <img src="{{ ad.image_url }}" alt="Ad Image" width="120" class="ad-image">
+                {% else %}
+                  <span class="no-image">No image</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="actions">
+                  <a href="{{ url_for('edit_ad', ad_id=ad.id) }}" class="edit-link">Edit</a>
+                  <form action="{{ url_for('delete_ad', ad_id=ad.id) }}" method="POST" class="delete-form">
+                    <button type="submit" class="delete-button" onclick="return confirm('Delete this ad?')">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="back-link">
+        <a href="{{ url_for('dashboard') }}">⬅ Back to Dashboard</a>
+      </div>
     </div>
 
-    <div class="back-link">
-      <a href="{{ url_for('dashboard') }}">⬅ Back to Dashboard</a>
-    </div>
   </div>
 </body>
 </html>
