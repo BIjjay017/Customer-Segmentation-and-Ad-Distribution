@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sent Logs</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <h1>📬 Sent Email Logs</h1>
+
+  <p>
+    <a href="{{ url_for('dashboard') }}">⬅ Back to Dashboard</a>
+    &nbsp;|&nbsp;
+    <a href="{{ url_for('export_logs') }}">Download CSV</a>
+  </p>
+
+  {% if logs %}
+    <table class="data" border="1" cellpadding="6" cellspacing="0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Timestamp</th>
+          <th>To (sent)</th>
+          <th>Customer ID</th>
+          <th>Customer Email</th>
+          <th>Ad ID</th>
+          <th>Ad Cluster</th>
+          <th>Ad Text (preview)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in logs %}
+        <tr>
+          <td>{{ row.log_id }}</td>
+          <td>{{ row.timestamp }}</td>
+          <td>{{ row.sent_to }}</td>
+          <td>{{ row.customer_id or '-' }}</td>
+          <td>{{ row.customer_email or '-' }}</td>
+          <td>{{ row.ad_id or '-' }}</td>
+          <td>{{ row.ad_cluster or '-' }}</td>
+          <td style="max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            {{ row.ad_text }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No logs found.</p>
+  {% endif %}
+</body>
+</html>
