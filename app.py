@@ -27,12 +27,12 @@ from dotenv import load_dotenv
 
 
 # ---------------- DB CONFIG ----------------
-# Use environment variables for database configuration (required for Vercel)
-# Falls back to localhost for local development
+# Use DATABASE_URL when available (recommended on Render/Supabase),
+# otherwise fall back to explicit DB_* environment variables.
 load_dotenv()
 
 APP_ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development")).lower()
-IS_PRODUCTION = APP_ENV == "production" or os.getenv("VERCEL") == "1"
+IS_PRODUCTION = APP_ENV == "production" or os.getenv("RENDER") == "true"
 
 logging.basicConfig(
     level=logging.INFO if IS_PRODUCTION else logging.DEBUG,
@@ -43,6 +43,13 @@ logger = logging.getLogger(__name__)
 
 def get_db_connection():
     """Get database connection using environment variables or fallback to local config"""
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        if "sslmode=" not in database_url:
+            separator = "&" if "?" in database_url else "?"
+            database_url = f"{database_url}{separator}sslmode=require"
+        return psycopg2.connect(database_url, connect_timeout=10)
+
     required_in_production = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"]
     if IS_PRODUCTION:
         missing = [key for key in required_in_production if not os.getenv(key)]
@@ -120,15 +127,14 @@ def healthz():
     return jsonify({"status": "ok", "environment": APP_ENV}), 200
 
 
-# Load model with error handling for serverless environments
-# In Vercel, the working directory might be different, so we try multiple paths
+# Load model with error handling for hosted environments.
 def load_model_file(filename):
     """Try to load model file from multiple possible locations"""
     possible_paths = [
         os.path.join("Model", filename),  # Model subdirectory
         os.path.join(os.path.dirname(__file__), "Model", filename),  # Absolute path
         filename,  # Current directory fallback
-        os.path.join("/var/task", "Model", filename),  # Vercel Lambda path
+        os.path.join("/opt/render/project/src", "Model", filename),  # Render path
     ]
 
     for path in possible_paths:
