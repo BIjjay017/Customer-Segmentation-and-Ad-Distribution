@@ -212,17 +212,30 @@ def assign_cluster(new_data):
     return int(np.argmin(distances))
 
 
+def require_login():
+    """Return a redirect response when session is missing auth markers."""
+    if "user_id" not in session:
+        flash("Please login to continue.", "warning")
+        return redirect(url_for("login"))
+    return None
+
+
 # ---------------- DASHBOARD ----------------
 @app.route("/")
 def dashboard():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
-    return render_template("dashboard.html", username=session["username"])
+    auth_redirect = require_login()
+    if auth_redirect:
+        return auth_redirect
+    return render_template("dashboard.html", username=session.get("username", "User"))
 
 
 # ---------------- Single ----------------
 @app.route("/single", methods=["GET", "POST"])
 def single_input():
+    auth_redirect = require_login()
+    if auth_redirect:
+        return auth_redirect
+
     errors = {}  # Dictionary to store errors
     values = {}  # Dictionary to keep entered values
 
@@ -346,6 +359,10 @@ def single_input():
 # ---------------- BULK UPLOAD ----------------
 @app.route("/bulk", methods=["GET", "POST"])
 def bulk_input():
+    auth_redirect = require_login()
+    if auth_redirect:
+        return auth_redirect
+
     if request.method == "POST":
         uploaded_file = request.files.get("file")
         if not uploaded_file:
@@ -468,122 +485,163 @@ def bulk_input():
 # ---------------- ADS MANAGEMENT ----------------
 @app.route("/ads", methods=["GET", "POST"])
 def ads_management():
-    conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    auth_redirect = require_login()
+    if auth_redirect:
+        return auth_redirect
 
-    if request.method == "POST":
-        cluster_id = request.form.get("cluster_id")
-        ad_text = request.form.get("ad_text")
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Handle image file upload
-        image_file = request.files.get("image_file")
-        image_url = None
-        if (
-            image_file
-            and image_file.filename != ""
-            and allowed_file(image_file.filename)
-        ):
-            filename = secure_filename(image_file.filename)
-            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-            image_file.save(filepath)
-            image_url = f"/static/images/{filename}"  # store relative URL
+        if request.method == "POST":
+            cluster_id = request.form.get("cluster_id")
+            ad_text = request.form.get("ad_text")
 
-        # Insert into database
-        cursor.execute(
-            "INSERT INTO ads (cluster, ad_text, image_url) VALUES (%s, %s, %s)",
-            (cluster_id, ad_text, image_url),
-        )
-        conn.commit()
+            # Handle image file upload
+            image_file = request.files.get("image_file")
+            image_url = None
+            if (
+                image_file
+                and image_file.filename != ""
+                and allowed_file(image_file.filename)
+            ):
+                filename = secure_filename(image_file.filename)
+                filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+                image_file.save(filepath)
+                image_url = f"/static/images/{filename}"  # store relative URL
 
-    # Fetch all ads
-    cursor.execute("SELECT * FROM ads")
-    ads = cursor.fetchall()
+            # Insert into database
+            cursor.execute(
+                "INSERT INTO ads (cluster, ad_text, image_url) VALUES (%s, %s, %s)",
+                (cluster_id, ad_text, image_url),
+            )
+            conn.commit()
 
-    cursor.close()
-    conn.close()
-    return render_template("ads.html", ads=ads)
+        # Fetch all ads
+        cursor.execute("SELECT * FROM ads")
+        ads = cursor.fetchall()
+        return render_template("ads.html", ads=ads)
+    except Exception:
+        logger.exception("Failed to load ads management page")
+        flash("Unable to load ad management right now. Please try again.", "danger")
+        return redirect(url_for("dashboard"))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # ---------------- DELETE AD ----------------
 @app.route("/ads/delete/<int:ad_id>", methods=["POST"])
 def delete_ad(ad_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    auth_redirect = require_login()
+    if auth_redirect:
+        return auth_redirect
 
-    # Optionally: delete image from static folder
-    cursor.execute("SELECT image_url FROM ads WHERE id=%s", (ad_id,))
-    result = cursor.fetchone()
-    if result and result[0]:
-        image_path = result[0].lstrip("/")  # remove leading '/'
-        if os.path.exists(image_path):
-            os.remove(image_path)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    # Delete ad from database
-    cursor.execute("DELETE FROM ads WHERE id=%s", (ad_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
+        # Optionally: delete image from static folder
+        cursor.execute("SELECT image_url FROM ads WHERE id=%s", (ad_id,))
+        result = cursor.fetchone()
+        if result and result[0]:
+            image_path = result[0].lstrip("/")  # remove leading '/'
+            if os.path.exists(image_path):
+                os.remove(image_path)
+
+        # Delete ad from database
+        cursor.execute("DELETE FROM ads WHERE id=%s", (ad_id,))
+        conn.commit()
+    except Exception:
+        logger.exception("Failed to delete ad")
+        flash("Unable to delete ad right now.", "danger")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
     return redirect(url_for("ads_management"))
 
 
 # ---------------- EDIT AD ----------------
 @app.route("/ads/edit/<int:ad_id>", methods=["GET", "POST"])
 def edit_ad(ad_id):
-    conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    auth_redirect = require_login()
+    if auth_redirect:
+        return auth_redirect
 
-    if request.method == "POST":
-        cluster_id = request.form.get("cluster_id")
-        ad_text = request.form.get("ad_text")
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Handle new image upload
-        image_file = request.files.get("image_file")
-        image_url = None
-        if (
-            image_file
-            and image_file.filename != ""
-            and allowed_file(image_file.filename)
-        ):
-            filename = secure_filename(image_file.filename)
-            filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-            image_file.save(filepath)
-            image_url = f"/static/images/{filename}"
-            cursor.execute(
-                "UPDATE ads SET cluster=%s, ad_text=%s, image_url=%s WHERE id=%s",
-                (cluster_id, ad_text, image_url, ad_id),
-            )
-        else:
-            # Update without changing image
-            cursor.execute(
-                "UPDATE ads SET cluster=%s, ad_text=%s WHERE id=%s",
-                (cluster_id, ad_text, ad_id),
-            )
-        conn.commit()
-        cursor.close()
-        conn.close()
+        if request.method == "POST":
+            cluster_id = request.form.get("cluster_id")
+            ad_text = request.form.get("ad_text")
+
+            # Handle new image upload
+            image_file = request.files.get("image_file")
+            image_url = None
+            if (
+                image_file
+                and image_file.filename != ""
+                and allowed_file(image_file.filename)
+            ):
+                filename = secure_filename(image_file.filename)
+                filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+                image_file.save(filepath)
+                image_url = f"/static/images/{filename}"
+                cursor.execute(
+                    "UPDATE ads SET cluster=%s, ad_text=%s, image_url=%s WHERE id=%s",
+                    (cluster_id, ad_text, image_url, ad_id),
+                )
+            else:
+                # Update without changing image
+                cursor.execute(
+                    "UPDATE ads SET cluster=%s, ad_text=%s WHERE id=%s",
+                    (cluster_id, ad_text, ad_id),
+                )
+            conn.commit()
+            return redirect(url_for("ads_management"))
+
+        # GET request: fetch ad data to prefill form
+        cursor.execute("SELECT * FROM ads WHERE id=%s", (ad_id,))
+        ad = cursor.fetchone()
+        return render_template("edit_ad.html", ad=ad)
+    except Exception:
+        logger.exception("Failed to load edit ad page")
+        flash("Unable to open ad editor right now.", "danger")
         return redirect(url_for("ads_management"))
-
-    # GET request: fetch ad data to prefill form
-    cursor.execute("SELECT * FROM ads WHERE id=%s", (ad_id,))
-    ad = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return render_template("edit_ad.html", ad=ad)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # ---------------- LOGS VIEW ----------------
 @app.route("/logs")
 def view_logs():
-    # require login (same check as dashboard)
-    if "user_id" not in session:
-        return redirect(url_for("login"))
+    auth_redirect = require_login()
+    if auth_redirect:
+        return auth_redirect
 
-    conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     # Join logs with customers and ads for friendly display
-    cursor.execute(
-        """
+        cursor.execute(
+            """
         SELECT
             l.id AS log_id,
             l.timestamp,
@@ -599,24 +657,34 @@ def view_logs():
         ORDER BY l.timestamp DESC
         LIMIT 500
     """
-    )
-    logs = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
-    return render_template("logs.html", logs=logs)
+        )
+        logs = cursor.fetchall()
+        return render_template("logs.html", logs=logs)
+    except Exception:
+        logger.exception("Failed to load logs page")
+        flash("Unable to load logs right now.", "danger")
+        return redirect(url_for("dashboard"))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # ---------------- LOGS EXPORT CSV ----------------
 @app.route("/logs/export")
 def export_logs():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
+    auth_redirect = require_login()
+    if auth_redirect:
+        return auth_redirect
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
         SELECT
             l.id, l.timestamp, l.email, l.customer_id, c.email AS customer_email,
             l.ad_id, a.cluster AS ad_cluster, a.ad_text
@@ -625,27 +693,34 @@ def export_logs():
         LEFT JOIN ads a ON l.ad_id = a.id
         ORDER BY l.timestamp DESC
     """
-    )
-    rows = cursor.fetchall()
-    colnames = [d[0] for d in cursor.description]
-    cursor.close()
-    conn.close()
+        )
+        rows = cursor.fetchall()
+        colnames = [d[0] for d in cursor.description]
 
-    # Create CSV in-memory
-    si = io.StringIO()
-    writer = csv.writer(si)
-    writer.writerow(colnames)
-    for r in rows:
-        writer.writerow(r)
+        # Create CSV in-memory
+        si = io.StringIO()
+        writer = csv.writer(si)
+        writer.writerow(colnames)
+        for r in rows:
+            writer.writerow(r)
 
-    output = si.getvalue()
-    si.close()
+        output = si.getvalue()
+        si.close()
 
-    return Response(
-        output,
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment;filename=logs_export.csv"},
-    )
+        return Response(
+            output,
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment;filename=logs_export.csv"},
+        )
+    except Exception:
+        logger.exception("Failed to export logs")
+        flash("Unable to export logs right now.", "danger")
+        return redirect(url_for("view_logs"))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # ---------- Register ----------
