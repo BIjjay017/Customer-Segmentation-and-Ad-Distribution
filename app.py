@@ -658,9 +658,11 @@ def register():
 
         hashed_pw = generate_password_hash(password)
 
-        conn = get_db_connection()
-        cur = conn.cursor()
+        conn = None
+        cur = None
         try:
+            conn = get_db_connection()
+            cur = conn.cursor()
             cur.execute(
                 "INSERT INTO users (username, email, password) VALUES (%s, %s, %s)",
                 (username, email, hashed_pw),
@@ -668,11 +670,31 @@ def register():
             conn.commit()
             flash("✅ Registered successfully! Please login.", "success")
             return redirect(url_for("login"))
-        except:
+        except psycopg2.errors.UniqueViolation:
+            if conn:
+                conn.rollback()
             flash("⚠️ Username or Email already exists", "danger")
+        except psycopg2.errors.UndefinedTable:
+            if conn:
+                conn.rollback()
+            flash(
+                "⚠️ Database schema is not initialized. Run schema_supabase.sql first.",
+                "danger",
+            )
+            logger.exception("Users table is missing during registration")
+        except Exception:
+            if conn:
+                conn.rollback()
+            flash(
+                "⚠️ Registration is temporarily unavailable. Please try again shortly.",
+                "danger",
+            )
+            logger.exception("Registration failed")
         finally:
-            cur.close()
-            conn.close()
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
     return render_template("register.html")
 
 
@@ -683,12 +705,29 @@ def login():
         email = request.form["email"]
         password = request.form["password"]
 
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT * FROM users WHERE email=%s", (email,))
-        user = cur.fetchone()
-        cur.close()
-        conn.close()
+        conn = None
+        cur = None
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM users WHERE email=%s", (email,))
+            user = cur.fetchone()
+        except psycopg2.errors.UndefinedTable:
+            flash(
+                "⚠️ Database schema is not initialized. Run schema_supabase.sql first.",
+                "danger",
+            )
+            logger.exception("Users table is missing during login")
+            return render_template("login.html")
+        except Exception:
+            flash("⚠️ Login is temporarily unavailable. Please try again shortly.", "danger")
+            logger.exception("Login failed")
+            return render_template("login.html")
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
 
         if user and check_password_hash(user["password"], password):
             session["user_id"] = user["id"]
