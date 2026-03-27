@@ -4,8 +4,11 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 
-SENDER_EMAIL = "siddharthachaudhary2@gmail.com"
-SENDER_PASSWORD = "iamv cnwg yrzb wgac"  # ✅ Gmail App Password, not normal password
+SENDER_EMAIL = os.getenv("SMTP_USERNAME")
+SENDER_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "1") == "1"
 
 def send_email(receiver_email, subject, body_html, image_path=None):
     """
@@ -14,6 +17,9 @@ def send_email(receiver_email, subject, body_html, image_path=None):
     - image_path: if provided, attach the image and reference as cid:ad_image
     """
     msg = MIMEMultipart("related")
+    if not SENDER_EMAIL or not SENDER_PASSWORD:
+        raise RuntimeError("Missing SMTP_USERNAME/SMTP_PASSWORD environment variables")
+
     msg["From"] = SENDER_EMAIL
     msg["To"] = receiver_email
     msg["Subject"] = subject
@@ -37,8 +43,9 @@ def send_email(receiver_email, subject, body_html, image_path=None):
         msg_alternative.attach(MIMEText(body_html, "html"))
 
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20)
+        if SMTP_USE_TLS:
+            server.starttls()
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
         server.quit()

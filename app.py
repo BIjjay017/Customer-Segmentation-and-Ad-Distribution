@@ -1,51 +1,125 @@
 import os
 import io
 import csv
-from flask import Response
-from flask import Flask, request, render_template, redirect, url_for
+import logging
+from datetime import timedelta
+from flask import Flask, request, render_template, redirect, url_for, session, flash, Response
 import joblib
 import numpy as np
 import pandas as pd
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from flask import Flask, request, render_template, redirect, url_for, session, flash
 from utils.db_utils import get_ad_for_cluster, log_campaign
 from utils.email_utils import send_email
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
 
 
 # ---------------- DB CONFIG ----------------
-db_config = {
-    "host": "localhost",
-    "user": "postgres",
-    "password": "",
-    "dbname": "customer_segmentation"
-}
+# Use environment variables for database configuration (required for Vercel)
+# Falls back to localhost for local development
+load_dotenv()
+
+APP_ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development")).lower()
+IS_PRODUCTION = APP_ENV == "production" or os.getenv("VERCEL") == "1"
+
+logging.basicConfig(
+    level=logging.INFO if IS_PRODUCTION else logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 def get_db_connection():
+    """Get database connection using environment variables or fallback to local config"""
+    required_in_production = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"]
+    if IS_PRODUCTION:
+        missing = [key for key in required_in_production if not os.getenv(key)]
+        if missing:
+            raise RuntimeError(f"Missing required DB environment variables in production: {missing}")
+
+    db_config = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "dbname": os.getenv("DB_NAME", "customer_segmentation"),
+        "port": int(os.getenv("DB_PORT", 5432)),
+        "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", 10)),
+    }
     return psycopg2.connect(**db_config)
 
 
 # ---------------- UPLOAD CONFIG ----------------
-UPLOAD_FOLDER = "static/images"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "images")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 
-# Ensure upload folder exists
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Ensure upload folder exists (only if filesystem is writable)
+# Note: Vercel's filesystem is read-only except /tmp, so file uploads won't persist
+try:
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+except (OSError, PermissionError):
+    # In serverless environments, we can't create directories
+    # Consider using Vercel Blob Storage or similar for file uploads
+    logger.warning("Cannot create upload folder %s. File uploads may not work in serverless environment.", UPLOAD_FOLDER)
 
 def allowed_file(filename):
     """Check if the uploaded file has an allowed extension."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # ---------------- FLASK APP ----------------
-app = Flask(__name__)
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.secret_key = "my_super_secret_key_123"
+app = Flask(__name__, template_folder="Templates", static_folder="static")
 
-# Load model
-centroids = joblib.load("Model/centroids.pkl")
-scaler = joblib.load("Model/scaler.pkl")
+secret_key = os.getenv("SECRET_KEY")
+if not secret_key:
+    if IS_PRODUCTION:
+        raise RuntimeError("SECRET_KEY is required in production")
+    secret_key = "dev-only-secret-key-change-me"
+
+app.config.update(
+    SECRET_KEY=secret_key,
+    UPLOAD_FOLDER=UPLOAD_FOLDER,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=IS_PRODUCTION,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+    MAX_CONTENT_LENGTH=10 * 1024 * 1024,
+)
+
+# Load model with error handling for serverless environments
+# In Vercel, the working directory might be different, so we try multiple paths
+def load_model_file(filename):
+    """Try to load model file from multiple possible locations"""
+    possible_paths = [
+        os.path.join("Model", filename),  # Model subdirectory
+        os.path.join(os.path.dirname(__file__), "Model", filename),  # Absolute path
+        filename,  # Current directory fallback
+        os.path.join("/var/task", "Model", filename),  # Vercel Lambda path
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            try:
+                logger.info("Loading model file from %s", path)
+                return joblib.load(path)
+            except Exception as e:
+                logger.warning("Failed to load %s: %s", path, e)
+                continue
+    
+    raise FileNotFoundError(
+        f"Model file '{filename}' not found in any of these locations: {possible_paths}. "
+        "Make sure the model files are included in your deployment."
+    )
+
+try:
+    centroids = load_model_file("centroids.pkl")
+    scaler = load_model_file("scaler.pkl")
+    logger.info("Models loaded successfully")
+except Exception as e:
+    logger.error("Error loading models: %s", e)
+    # Set to None so we can handle this gracefully in routes
+    centroids = None
+    scaler = None
 
 # Get exact training feature names (in the order scaler expects)
 if hasattr(scaler, "feature_names_in_"):
@@ -112,7 +186,7 @@ def single_input():
             full_payment = float(request.form.get("full_payment"))
             purchases_freq = float(request.form.get("purchases_freq"))
             cash_adv_freq = float(request.form.get("cash_adv_freq"))
-        except:
+        except (TypeError, ValueError):
             errors["general"] = "Please enter valid numeric values for all fields."
             return render_template("single.html", errors=errors, values=request.form)
 
@@ -137,7 +211,11 @@ def single_input():
         if errors:
             return render_template("single.html", errors=errors, values=request.form)
 
-        # Predict cluster
+        # Predict cluster (check if models are loaded)
+        if centroids is None or scaler is None:
+            errors["general"] = "Model files not loaded. Please check server configuration."
+            return render_template("single.html", errors=errors, values=request.form)
+        
         features = [balance, purchases, cash_advance, credit_limit, payments, full_payment, purchases_freq, cash_adv_freq]
         cluster_id = assign_cluster(features)
 
@@ -148,9 +226,10 @@ def single_input():
             INSERT INTO customers 
             (email, balance, purchases, cash_advance, credit_limit, payments, full_payment, purchases_freq, cash_adv_freq, cluster)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
         """, (email, *features, cluster_id))
+        customer_id = cursor.fetchone()[0]  # PostgreSQL uses RETURNING, not lastrowid
         conn.commit()
-        customer_id = cursor.lastrowid
         cursor.close()
         conn.close()
 
@@ -159,14 +238,18 @@ def single_input():
         if not ad:
             return render_template("single_result.html", results=[{"email": email, "status": "❌ No ad found", "cluster": cluster_id}])
 
-        # Send email
-        image_path = ad.get("image_url").lstrip("/") if ad.get("image_url") else None
-        send_email(email, f"Ad for Cluster {cluster_id}", f"<h2>Special Offer for You!</h2><p>{ad['ad_text']}</p>", image_path=image_path)
+        try:
+            # Send email
+            image_path = ad.get("image_url").lstrip("/") if ad.get("image_url") else None
+            send_email(email, f"Ad for Cluster {cluster_id}", f"<h2>Special Offer for You!</h2><p>{ad['ad_text']}</p>", image_path=image_path)
 
-        # Log campaign
-        log_campaign(customer_id, ad["id"], email)
+            # Log campaign
+            log_campaign(customer_id, ad["id"], email)
+            results = [{"email": email, "status": "✅ Email sent", "cluster": cluster_id}]
+        except Exception as e:
+            logger.exception("Failed to send email or log campaign")
+            results = [{"email": email, "status": "❌ Email failed", "cluster": cluster_id, "error": str(e)}]
 
-        results = [{"email": email, "status": "✅ Email sent", "cluster": cluster_id}]
         return render_template("single_result.html", results=results)
 
     return render_template("single.html", errors=errors, values=values)
@@ -211,7 +294,11 @@ def bulk_input():
         # Rename to scaler original names expected by scaler
         X_df.columns = FEATURE_NAMES
 
-        # Vectorized scale + assign clusters
+        # Vectorized scale + assign clusters (check if models are loaded)
+        if centroids is None or scaler is None:
+            flash("❌ Model files not loaded. Please check server configuration.", "danger")
+            return redirect(request.url)
+        
         try:
             X_scaled = scaler.transform(X_df)  # shape (n, m)
             distances = np.linalg.norm(X_scaled[:, None, :] - centroids[None, :, :], axis=2)  # (n_clusters)
@@ -238,9 +325,10 @@ def bulk_input():
                     INSERT INTO customers
                     (email, balance, purchases, cash_advance, credit_limit, payments, full_payment, purchases_freq, cash_adv_freq, cluster)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    RETURNING id
                 """, (email, *features, cluster_id))
+                customer_id = cursor.fetchone()[0]  # PostgreSQL uses RETURNING, not lastrowid
                 conn.commit()
-                customer_id = cursor.lastrowid
                 cursor.close()
                 conn.close()
             except Exception as e:
@@ -491,5 +579,7 @@ def logout():
 
 # ---------------- RUN APP ----------------
 if __name__ == "__main__":
-    print(">>> Starting Flask App <<<")
-    app.run(debug=True)
+    port = int(os.getenv("PORT", 5000))
+    debug_mode = os.getenv("FLASK_DEBUG", "0") == "1"
+    logger.info("Starting Flask app on port %s (debug=%s)", port, debug_mode)
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
