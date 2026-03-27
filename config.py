@@ -9,5 +9,5 @@ DB_CONFIG = {
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASSWORD"),
     "dbname": os.getenv("DB_NAME"),
-    "port": int(os.getenv("DB_PORT", 5432))   # default to 5432 if missing
+    "port": int(os.getenv("DB_PORT", 5432)),  # default to 5432 if missing
 }

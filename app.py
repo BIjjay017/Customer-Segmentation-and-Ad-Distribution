@@ -3,7 +3,17 @@ import io
 import csv
 import logging
 from datetime import timedelta
-from flask import Flask, request, render_template, redirect, url_for, session, flash, Response
+from flask import (
+    Flask,
+    request,
+    render_template,
+    redirect,
+    url_for,
+    session,
+    flash,
+    Response,
+    jsonify,
+)
 import joblib
 import numpy as np
 import pandas as pd
@@ -30,13 +40,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 def get_db_connection():
     """Get database connection using environment variables or fallback to local config"""
     required_in_production = ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"]
     if IS_PRODUCTION:
         missing = [key for key in required_in_production if not os.getenv(key)]
         if missing:
-            raise RuntimeError(f"Missing required DB environment variables in production: {missing}")
+            raise RuntimeError(
+                f"Missing required DB environment variables in production: {missing}"
+            )
 
     db_config = {
         "host": os.getenv("DB_HOST", "localhost"),
@@ -61,11 +74,16 @@ try:
 except (OSError, PermissionError):
     # In serverless environments, we can't create directories
     # Consider using Vercel Blob Storage or similar for file uploads
-    logger.warning("Cannot create upload folder %s. File uploads may not work in serverless environment.", UPLOAD_FOLDER)
+    logger.warning(
+        "Cannot create upload folder %s. File uploads may not work in serverless environment.",
+        UPLOAD_FOLDER,
+    )
+
 
 def allowed_file(filename):
     """Check if the uploaded file has an allowed extension."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 # ---------------- FLASK APP ----------------
 app = Flask(__name__, template_folder="Templates", static_folder="static")
@@ -86,6 +104,22 @@ app.config.update(
     MAX_CONTENT_LENGTH=10 * 1024 * 1024,
 )
 
+
+@app.after_request
+def set_security_headers(response):
+    """Apply baseline security headers for production deployments."""
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    return response
+
+
+@app.get("/healthz")
+def healthz():
+    """Simple health endpoint for uptime checks and deployment probes."""
+    return jsonify({"status": "ok", "environment": APP_ENV}), 200
+
+
 # Load model with error handling for serverless environments
 # In Vercel, the working directory might be different, so we try multiple paths
 def load_model_file(filename):
@@ -96,7 +130,7 @@ def load_model_file(filename):
         filename,  # Current directory fallback
         os.path.join("/var/task", "Model", filename),  # Vercel Lambda path
     ]
-    
+
     for path in possible_paths:
         if os.path.exists(path):
             try:
@@ -105,11 +139,12 @@ def load_model_file(filename):
             except Exception as e:
                 logger.warning("Failed to load %s: %s", path, e)
                 continue
-    
+
     raise FileNotFoundError(
         f"Model file '{filename}' not found in any of these locations: {possible_paths}. "
         "Make sure the model files are included in your deployment."
     )
+
 
 try:
     centroids = load_model_file("centroids.pkl")
@@ -123,12 +158,18 @@ except Exception as e:
 
 # Get exact training feature names (in the order scaler expects)
 if hasattr(scaler, "feature_names_in_"):
-    FEATURE_NAMES = list(scaler.feature_names_in_)   # e.g. ['BALANCE','PURCHASES',...]
+    FEATURE_NAMES = list(scaler.feature_names_in_)  # e.g. ['BALANCE','PURCHASES',...]
 else:
     # fallback if scaler doesn't carry names (adjust if your training order differs)
     FEATURE_NAMES = [
-        "BALANCE","PURCHASES","CASH_ADVANCE","CREDIT_LIMIT",
-        "PAYMENTS","PRC_FULL_PAYMENT","PURCHASES_FREQUENCY","CASH_ADVANCE_FREQUENCY"
+        "BALANCE",
+        "PURCHASES",
+        "CASH_ADVANCE",
+        "CREDIT_LIMIT",
+        "PAYMENTS",
+        "PRC_FULL_PAYMENT",
+        "PURCHASES_FREQUENCY",
+        "CASH_ADVANCE_FREQUENCY",
     ]
 
 # Normalized lowercase names that match form/CSV headers you use in the app
@@ -138,8 +179,9 @@ FEATURE_NAMES_LOWER = [n.strip().lower().replace(" ", "_") for n in FEATURE_NAME
 SYNONYMS = {
     "prc_full_payment": "full_payment",
     "purchases_frequency": "purchases_freq",
-    "cash_advance_frequency": "cash_adv_freq"
+    "cash_advance_frequency": "cash_adv_freq",
 }
+
 
 def assign_cluster(new_data):
     """
@@ -150,12 +192,16 @@ def assign_cluster(new_data):
     """
     # Ensure input is length-matched
     if len(new_data) != len(FEATURE_NAMES_LOWER):
-        raise ValueError(f"Expected {len(FEATURE_NAMES_LOWER)} features in order {FEATURE_NAMES_LOWER}")
+        raise ValueError(
+            f"Expected {len(FEATURE_NAMES_LOWER)} features in order {FEATURE_NAMES_LOWER}"
+        )
 
     # Build a DataFrame with normalized columns then rename to scaler's original column names
     df = pd.DataFrame([new_data], columns=FEATURE_NAMES_LOWER)
     df.columns = FEATURE_NAMES  # now matches scaler.feature_names_in_
-    scaled = scaler.transform(df)   # scaler.transform accepts DataFrame with those column names
+    scaled = scaler.transform(
+        df
+    )  # scaler.transform accepts DataFrame with those column names
     distances = np.linalg.norm(scaled - centroids, axis=1)  # centroids already scaled
     return int(np.argmin(distances))
 
@@ -166,6 +212,7 @@ def dashboard():
     if "user_id" not in session:
         return redirect(url_for("login"))
     return render_template("dashboard.html", username=session["username"])
+
 
 # ---------------- Single ----------------
 @app.route("/single", methods=["GET", "POST"])
@@ -213,21 +260,35 @@ def single_input():
 
         # Predict cluster (check if models are loaded)
         if centroids is None or scaler is None:
-            errors["general"] = "Model files not loaded. Please check server configuration."
+            errors[
+                "general"
+            ] = "Model files not loaded. Please check server configuration."
             return render_template("single.html", errors=errors, values=request.form)
-        
-        features = [balance, purchases, cash_advance, credit_limit, payments, full_payment, purchases_freq, cash_adv_freq]
+
+        features = [
+            balance,
+            purchases,
+            cash_advance,
+            credit_limit,
+            payments,
+            full_payment,
+            purchases_freq,
+            cash_adv_freq,
+        ]
         cluster_id = assign_cluster(features)
 
         # Save customer
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO customers 
             (email, balance, purchases, cash_advance, credit_limit, payments, full_payment, purchases_freq, cash_adv_freq, cluster)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             RETURNING id
-        """, (email, *features, cluster_id))
+        """,
+            (email, *features, cluster_id),
+        )
         customer_id = cursor.fetchone()[0]  # PostgreSQL uses RETURNING, not lastrowid
         conn.commit()
         cursor.close()
@@ -236,23 +297,45 @@ def single_input():
         # Fetch ad
         ad = get_ad_for_cluster(cluster_id)
         if not ad:
-            return render_template("single_result.html", results=[{"email": email, "status": "❌ No ad found", "cluster": cluster_id}])
+            return render_template(
+                "single_result.html",
+                results=[
+                    {"email": email, "status": "❌ No ad found", "cluster": cluster_id}
+                ],
+            )
 
         try:
             # Send email
-            image_path = ad.get("image_url").lstrip("/") if ad.get("image_url") else None
-            send_email(email, f"Ad for Cluster {cluster_id}", f"<h2>Special Offer for You!</h2><p>{ad['ad_text']}</p>", image_path=image_path)
+            image_path = (
+                ad.get("image_url").lstrip("/") if ad.get("image_url") else None
+            )
+            send_email(
+                email,
+                f"Ad for Cluster {cluster_id}",
+                f"<h2>Special Offer for You!</h2><p>{ad['ad_text']}</p>",
+                image_path=image_path,
+            )
 
             # Log campaign
             log_campaign(customer_id, ad["id"], email)
-            results = [{"email": email, "status": "✅ Email sent", "cluster": cluster_id}]
+            results = [
+                {"email": email, "status": "✅ Email sent", "cluster": cluster_id}
+            ]
         except Exception as e:
             logger.exception("Failed to send email or log campaign")
-            results = [{"email": email, "status": "❌ Email failed", "cluster": cluster_id, "error": str(e)}]
+            results = [
+                {
+                    "email": email,
+                    "status": "❌ Email failed",
+                    "cluster": cluster_id,
+                    "error": str(e),
+                }
+            ]
 
         return render_template("single_result.html", results=results)
 
     return render_template("single.html", errors=errors, values=values)
+
 
 # ---------------- BULK UPLOAD ----------------
 @app.route("/bulk", methods=["GET", "POST"])
@@ -296,12 +379,16 @@ def bulk_input():
 
         # Vectorized scale + assign clusters (check if models are loaded)
         if centroids is None or scaler is None:
-            flash("❌ Model files not loaded. Please check server configuration.", "danger")
+            flash(
+                "❌ Model files not loaded. Please check server configuration.", "danger"
+            )
             return redirect(request.url)
-        
+
         try:
             X_scaled = scaler.transform(X_df)  # shape (n, m)
-            distances = np.linalg.norm(X_scaled[:, None, :] - centroids[None, :, :], axis=2)  # (n_clusters)
+            distances = np.linalg.norm(
+                X_scaled[:, None, :] - centroids[None, :, :], axis=2
+            )  # (n_clusters)
             clusters = np.argmin(distances, axis=1)
         except Exception as e:
             flash(f"❌ Error during scaling/assignment: {e}", "danger")
@@ -321,18 +408,25 @@ def bulk_input():
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO customers
                     (email, balance, purchases, cash_advance, credit_limit, payments, full_payment, purchases_freq, cash_adv_freq, cluster)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     RETURNING id
-                """, (email, *features, cluster_id))
-                customer_id = cursor.fetchone()[0]  # PostgreSQL uses RETURNING, not lastrowid
+                """,
+                    (email, *features, cluster_id),
+                )
+                customer_id = cursor.fetchone()[
+                    0
+                ]  # PostgreSQL uses RETURNING, not lastrowid
                 conn.commit()
                 cursor.close()
                 conn.close()
             except Exception as e:
-                results.append({"email": email, "status": "❌ DB error", "error": str(e)})
+                results.append(
+                    {"email": email, "status": "❌ DB error", "error": str(e)}
+                )
                 continue
 
             ad = get_ad_for_cluster(cluster_id)
@@ -341,12 +435,23 @@ def bulk_input():
                 continue
 
             try:
-                image_path = ad.get("image_url").lstrip("/") if ad.get("image_url") else None
-                send_email(email, f"Ad for Cluster {cluster_id}", f"<h2>Special Offer for You!</h2><p>{ad['ad_text']}</p>", image_path=image_path)
+                image_path = (
+                    ad.get("image_url").lstrip("/") if ad.get("image_url") else None
+                )
+                send_email(
+                    email,
+                    f"Ad for Cluster {cluster_id}",
+                    f"<h2>Special Offer for You!</h2><p>{ad['ad_text']}</p>",
+                    image_path=image_path,
+                )
                 log_campaign(customer_id, ad["id"], email)
-                results.append({"email": email, "status": "✅ Email sent", "cluster": cluster_id})
+                results.append(
+                    {"email": email, "status": "✅ Email sent", "cluster": cluster_id}
+                )
             except Exception as e:
-                results.append({"email": email, "status": "❌ Email failed", "error": str(e)})
+                results.append(
+                    {"email": email, "status": "❌ Email failed", "error": str(e)}
+                )
 
         # Render results page (bulk_result.html expects results list)
         return render_template("bulk_result.html", results=results)
@@ -367,7 +472,11 @@ def ads_management():
         # Handle image file upload
         image_file = request.files.get("image_file")
         image_url = None
-        if image_file and image_file.filename != "" and allowed_file(image_file.filename):
+        if (
+            image_file
+            and image_file.filename != ""
+            and allowed_file(image_file.filename)
+        ):
             filename = secure_filename(image_file.filename)
             filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
             image_file.save(filepath)
@@ -376,7 +485,7 @@ def ads_management():
         # Insert into database
         cursor.execute(
             "INSERT INTO ads (cluster, ad_text, image_url) VALUES (%s, %s, %s)",
-            (cluster_id, ad_text, image_url)
+            (cluster_id, ad_text, image_url),
         )
         conn.commit()
 
@@ -387,6 +496,7 @@ def ads_management():
     cursor.close()
     conn.close()
     return render_template("ads.html", ads=ads)
+
 
 # ---------------- DELETE AD ----------------
 @app.route("/ads/delete/<int:ad_id>", methods=["POST"])
@@ -409,6 +519,7 @@ def delete_ad(ad_id):
     conn.close()
     return redirect(url_for("ads_management"))
 
+
 # ---------------- EDIT AD ----------------
 @app.route("/ads/edit/<int:ad_id>", methods=["GET", "POST"])
 def edit_ad(ad_id):
@@ -422,20 +533,24 @@ def edit_ad(ad_id):
         # Handle new image upload
         image_file = request.files.get("image_file")
         image_url = None
-        if image_file and image_file.filename != "" and allowed_file(image_file.filename):
+        if (
+            image_file
+            and image_file.filename != ""
+            and allowed_file(image_file.filename)
+        ):
             filename = secure_filename(image_file.filename)
             filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
             image_file.save(filepath)
             image_url = f"/static/images/{filename}"
             cursor.execute(
                 "UPDATE ads SET cluster=%s, ad_text=%s, image_url=%s WHERE id=%s",
-                (cluster_id, ad_text, image_url, ad_id)
+                (cluster_id, ad_text, image_url, ad_id),
             )
         else:
             # Update without changing image
             cursor.execute(
                 "UPDATE ads SET cluster=%s, ad_text=%s WHERE id=%s",
-                (cluster_id, ad_text, ad_id)
+                (cluster_id, ad_text, ad_id),
             )
         conn.commit()
         cursor.close()
@@ -449,6 +564,7 @@ def edit_ad(ad_id):
     conn.close()
     return render_template("edit_ad.html", ad=ad)
 
+
 # ---------------- LOGS VIEW ----------------
 @app.route("/logs")
 def view_logs():
@@ -460,7 +576,8 @@ def view_logs():
     cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     # Join logs with customers and ads for friendly display
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT
             l.id AS log_id,
             l.timestamp,
@@ -475,7 +592,8 @@ def view_logs():
         LEFT JOIN ads a ON l.ad_id = a.id
         ORDER BY l.timestamp DESC
         LIMIT 500
-    """)
+    """
+    )
     logs = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -491,7 +609,8 @@ def export_logs():
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT
             l.id, l.timestamp, l.email, l.customer_id, c.email AS customer_email,
             l.ad_id, a.cluster AS ad_cluster, a.ad_text
@@ -499,7 +618,8 @@ def export_logs():
         LEFT JOIN customers c ON l.customer_id = c.id
         LEFT JOIN ads a ON l.ad_id = a.id
         ORDER BY l.timestamp DESC
-    """)
+    """
+    )
     rows = cursor.fetchall()
     colnames = [d[0] for d in cursor.description]
     cursor.close()
@@ -518,7 +638,7 @@ def export_logs():
     return Response(
         output,
         mimetype="text/csv",
-        headers={"Content-Disposition": "attachment;filename=logs_export.csv"}
+        headers={"Content-Disposition": "attachment;filename=logs_export.csv"},
     )
 
 
@@ -537,7 +657,7 @@ def register():
         try:
             cur.execute(
                 "INSERT INTO users (username, email, password) VALUES (%s, %s, %s)",
-                (username, email, hashed_pw)
+                (username, email, hashed_pw),
             )
             conn.commit()
             flash("✅ Registered successfully! Please login.", "success")
@@ -548,6 +668,7 @@ def register():
             cur.close()
             conn.close()
     return render_template("register.html")
+
 
 # ---------- Login ----------
 @app.route("/login", methods=["GET", "POST"])
@@ -571,11 +692,13 @@ def login():
             flash("❌ Invalid email or password", "danger")
     return render_template("login.html")
 
+
 # ---------- Logout ----------
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
 
 # ---------------- RUN APP ----------------
 if __name__ == "__main__":

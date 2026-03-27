@@ -10,6 +10,7 @@ SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "1") == "1"
 
+
 def send_email(receiver_email, subject, body_html, image_path=None):
     """
     Send an email with optional inline image.
@@ -52,3 +53,4 @@ def send_email(receiver_email, subject, body_html, image_path=None):
         print(f"✅ Email sent to {receiver_email}")
     except Exception as e:
         print(f"❌ Error sending email: {e}")
+        raise
